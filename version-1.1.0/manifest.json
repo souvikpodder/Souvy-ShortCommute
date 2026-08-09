@@ -1,0 +1,17 @@
+{
+  "Name": "ShortCommute",
+  "Version": "1.1.0",
+  "Id": "Souvy.ShortCommute",
+  "MinimumGameVersion": "1.0.0.0",
+  "Description": "Keeps employed beavers housed close to their workplace by road distance. A performance-focused reimplementation of the commute-balancing idea: distance work is rooted at the workplace and cached, and reassignment is spread under a per-tick budget so there is no day-start stall.",
+  "RequiredMods": [
+    {
+      "Id": "Harmony",
+      "MinimumVersion": "2.3.3"
+    },
+    {
+      "Id": "eMka.ModSettings",
+      "MinimumVersion": "0.6.5.1"
+    }
+  ]
+}

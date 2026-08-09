@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>SouvyShortCommute</AssemblyName>
+    <OutputPath>.\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <Reference>
+      <Private>False</Private>
+    </Reference>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\1062090\3284904751\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="ModSettings.Core">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\1062090\3283831040\version-1.1\Scripts\ModSettings.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="ModSettings.Common">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\1062090\3283831040\version-1.1\Scripts\ModSettings.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Bindito.Core">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed\Bindito.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Bindito.Unity">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed\Bindito.Unity.dll</HintPath>
+    </Reference>
+    <Reference Include="C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed\Timberborn.*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed\UnityEngine.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed\UnityEngine.*Module.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
