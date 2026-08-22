@@ -1,37 +1,15 @@
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using Timberborn.Beavers;
+using Timberborn.DwellingSystem;
 using Timberborn.SingletonSystem;
 using UnityEngine;
 
 namespace SouvyShortCommute.Overlay {
 
   /// <summary>
-  /// Applies the overlay's surgical Harmony patches once at game load. Each is a
-  /// prefix that skips a single vanilla method while the commute overlay is on:
-  /// <list type="bullet">
-  ///   <item><c>DistanceHeatmapShower.ShowHeatmap</c> — the vanilla building
-  ///   distance heatmap shown on selecting any building with a path range. It
-  ///   paints the same <c>Secondary</c> highlight layer the overlay uses, so it
-  ///   would overwrite the overlay's commute colours. (Gated on
-  ///   <see cref="CommuteOverlaySuppression.Active"/>.)</item>
-  ///   <item><c>MechanicalGraphHighlightService.HighlightSelectedNode</c> — the
-  ///   power-network highlight shown on selecting a powered building. (Gated on
-  ///   <c>Active</c>.)</item>
-  ///   <item><c>DistrictPathNavRangeDrawer.LateUpdate</c> — the vanilla road/nav
-  ///   range mesh path-range buildings draw on selection. It rebuilds its whole
-  ///   per-tile mesh as the selected/hovered target changes (a measured ~17 ms+
-  ///   per frame on large path networks). Heavy enough that it's gated on
-  ///   <c>Active</c> <em>and</em> the player opt-in
-  ///   <see cref="CommuteOverlaySuppression.HidePathRange"/> rather than suppressed
-  ///   unconditionally.</item>
-  /// </list>
-  ///
-  /// <para>These are the <em>only</em> Harmony patches in the mod — narrow,
-  /// reversible (gated by a flag, not a behaviour rewrite), and inert while the
-  /// overlay is off (the prefix returns <c>true</c>, so vanilla runs untouched).
-  /// All targets are <c>internal</c> in other assemblies, so they're resolved by
-  /// name via <see cref="AccessTools"/> and patched manually rather than by
-  /// attribute.</para>
+  /// Applies the overlay's surgical Harmony patches and DwellerHomeAssigner safety guards once at game load.
   /// </summary>
   public sealed class CommuteOverlayPatcher : ILoadableSingleton {
 
@@ -63,20 +41,25 @@ namespace SouvyShortCommute.Overlay {
       try {
         var harmony = new Harmony(HarmonyId);
         var applied = 0;
-        applied += PatchSuppression(harmony,
+        applied += PatchMethod(harmony,
             "Timberborn.DistanceHeatmap.DistanceHeatmapShower", "ShowHeatmap",
             SkipWhenOverlayActiveMethod) ? 1 : 0;
-        applied += PatchSuppression(harmony,
+        applied += PatchMethod(harmony,
             "Timberborn.MechanicalSystemHighlighting.MechanicalGraphHighlightService",
             "HighlightSelectedNode", SkipWhenOverlayActiveMethod) ? 1 : 0;
-        applied += PatchSuppression(harmony,
+        applied += PatchMethod(harmony,
             "Timberborn.BuildingsNavigation.DistrictPathNavRangeDrawer", "LateUpdate",
             SkipPathRangeMethod) ? 1 : 0;
-        Debug.Log($"[ShortCommute] Overlay suppression: applied {applied}/3 Harmony prefixes.");
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.DwellerHomeAssigner", "AssignDweller",
+            AssignDwellerPrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.DwellerHomeAssigner", "AddDweller",
+            AddDwellerPrefixMethod) ? 1 : 0;
+        Debug.Log($"[ShortCommute] Harmony patches: applied {applied}/5 prefixes.");
       } catch (System.Exception ex) {
-        // Last-resort net (e.g. Harmony itself unavailable). Loud but non-fatal:
-        // the overlay still works, just without suppression — no game state is touched.
-        Debug.LogError($"[ShortCommute] Overlay suppression patches failed to apply "
+        // Last-resort net (e.g. Harmony itself unavailable). Loud but non-fatal.
+        Debug.LogError($"[ShortCommute] Harmony patches failed to apply "
                        + $"(is 0Harmony.dll loaded?): {ex}");
       }
     }
@@ -85,32 +68,24 @@ namespace SouvyShortCommute.Overlay {
 
     #region Patching
 
-    /// <summary>Prefix the named (instance, parameterless) method with the
-    /// suppression gate. Fully self-contained and non-throwing: a missing target
-    /// (game update) or a patch that won't apply is logged and skipped, so the
-    /// other suppressions — and the overlay itself — keep working. Returns whether
-    /// this one went on.</summary>
-    private static bool PatchSuppression(Harmony harmony, string typeName, string methodName,
+    /// <summary>Prefix the named method with the given prefix handler.</summary>
+    private static bool PatchMethod(Harmony harmony, string typeName, string methodName,
         MethodInfo prefix) {
       try {
         var type = AccessTools.TypeByName(typeName);
         if (type == null) {
-          Debug.LogError($"[ShortCommute] Overlay suppression: type '{typeName}' not found — "
-                         + "vanilla behaviour will not be suppressed under the overlay.");
+          Debug.LogError($"[ShortCommute] Patch target: type '{typeName}' not found.");
           return false;
         }
         var method = AccessTools.Method(type, methodName);
         if (method == null) {
-          Debug.LogError($"[ShortCommute] Overlay suppression: method '{typeName}.{methodName}' "
-                         + "not found — vanilla behaviour will not be suppressed under the overlay.");
+          Debug.LogError($"[ShortCommute] Patch target: method '{typeName}.{methodName}' not found.");
           return false;
         }
         harmony.Patch(method, prefix: new HarmonyMethod(prefix));
         return true;
       } catch (System.Exception ex) {
-        // Non-fatal: this one suppression is off, the rest of the mod is unaffected.
-        Debug.LogError($"[ShortCommute] Overlay suppression: failed to patch "
-                       + $"'{typeName}.{methodName}' — {ex.Message}. Continuing without it.");
+        Debug.LogError($"[ShortCommute] Failed to patch '{typeName}.{methodName}' — {ex.Message}.");
         return false;
       }
     }
@@ -121,6 +96,12 @@ namespace SouvyShortCommute.Overlay {
     private static readonly MethodInfo SkipPathRangeMethod =
         AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(SkipPathRangeWhenEnabled));
 
+    private static readonly MethodInfo AssignDwellerPrefixMethod =
+        AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(AssignDwellerSafetyPrefix));
+
+    private static readonly MethodInfo AddDwellerPrefixMethod =
+        AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(AddDwellerSafetyPrefix));
+
     /// <summary>Harmony prefix: returning <c>false</c> skips the original. We skip
     /// (suppress the vanilla highlight) exactly when the overlay is active.</summary>
     private static bool SkipWhenOverlayActive() => !CommuteOverlaySuppression.Active;
@@ -129,6 +110,36 @@ namespace SouvyShortCommute.Overlay {
     /// overlay is active <em>and</em> the player opted into hiding it.</summary>
     private static bool SkipPathRangeWhenEnabled() =>
         !(CommuteOverlaySuppression.Active && CommuteOverlaySuppression.HidePathRange);
+
+    /// <summary>
+    /// Harmony prefix on DwellerHomeAssigner.AssignDweller:
+    /// Sanitizes the primary and secondary beaver collections so that destroyed, despawned,
+    /// or uninitialized beaver instances are filtered out before ComponentCache is queried.
+    /// </summary>
+    private static void AssignDwellerSafetyPrefix(ref IEnumerable<Beaver> primaryBeavers, ref IEnumerable<Beaver> secondaryBeavers) {
+      if (primaryBeavers != null) {
+        primaryBeavers = SafeFilterBeavers(primaryBeavers);
+      }
+      if (secondaryBeavers != null) {
+        secondaryBeavers = SafeFilterBeavers(secondaryBeavers);
+      }
+    }
+
+    /// <summary>
+    /// Harmony prefix on DwellerHomeAssigner.AddDweller:
+    /// Validates the dwelling component before assigning dwellers.
+    /// </summary>
+    private static bool AddDwellerSafetyPrefix(Timberborn.BaseComponentSystem.BaseComponent dwelling) {
+      return dwelling && dwelling.GameObject != null && dwelling.Enabled;
+    }
+
+    private static IEnumerable<Beaver> SafeFilterBeavers(IEnumerable<Beaver> beavers) {
+      foreach (var beaver in beavers) {
+        if (beaver && beaver.GameObject != null && beaver.Enabled && beaver.HasComponent<Dweller>()) {
+          yield return beaver;
+        }
+      }
+    }
 
     #endregion
 

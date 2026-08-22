@@ -106,6 +106,7 @@ namespace SouvyShortCommute {
       _rows.Clear();
       _workplaces.Clear();
       foreach (var worker in _districtCenter.DistrictPopulation.Adults
+                   .Where(beaver => beaver && beaver.GameObject != null && beaver.Enabled)
                    .Select(beaver => beaver.GetComponent<Worker>())
                    .Where(worker => worker is { Employed: true })) {
         if (!_pending.Contains(worker)) {
@@ -285,9 +286,10 @@ namespace SouvyShortCommute {
       Dweller? best = null;
       var bestImprovement = float.MinValue;
 
-      var occupants = aggressive
+      var occupants = (aggressive
           ? target.AdultDwellers.Concat(target.ChildDwellers)
-          : target.AdultDwellers;
+          : target.AdultDwellers)
+          .Where(d => d && d.GameObject != null && d.Enabled);
 
       foreach (var occupant in occupants) {
         var occupantWorker = occupant.GetComponent<Worker>();
@@ -388,7 +390,9 @@ namespace SouvyShortCommute {
         CountAdultBeavers(center) - dwellings.Sum(dwelling => dwelling.AdultSlots) > 0;
 
     private static int CountAdultBeavers(DistrictCenter center) =>
-        center.DistrictPopulation.Adults.Count(beaver => beaver.GetComponent<Dweller>() != null);
+        center.DistrictPopulation.Adults
+            .Where(beaver => beaver && beaver.GameObject != null && beaver.Enabled)
+            .Count(beaver => beaver.HasComponent<Dweller>());
 
     private static void SwapHomes(Dweller a, Dweller b) {
       var homeA = a.Home;
