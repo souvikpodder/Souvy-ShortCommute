@@ -56,7 +56,25 @@ namespace SouvyShortCommute.Overlay {
         applied += PatchMethod(harmony,
             "Timberborn.DwellingSystem.DwellerHomeAssigner", "AddDweller",
             AddDwellerPrefixMethod) ? 1 : 0;
-        Debug.Log($"[ShortCommute] Harmony patches: applied {applied}/5 prefixes.");
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.Dwelling", "get_AdultDwellers",
+            DwellingSanitizePrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.Dwelling", "get_ChildDwellers",
+            DwellingSanitizePrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.Dwelling", "get_NumberOfAdultDwellers",
+            DwellingSanitizePrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.Dwelling", "get_NumberOfChildDwellers",
+            DwellingSanitizePrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystem.Dwelling", "get_NumberOfDwellers",
+            DwellingSanitizePrefixMethod) ? 1 : 0;
+        applied += PatchMethod(harmony,
+            "Timberborn.DwellingSystemUI.DwellingUserFragment", "UpdateViews",
+            DwellingUserFragmentUpdateViewsPrefixMethod) ? 1 : 0;
+        Debug.Log($"[ShortCommute] Harmony patches: applied {applied}/11 prefixes.");
       } catch (System.Exception ex) {
         // Last-resort net (e.g. Harmony itself unavailable). Loud but non-fatal.
         Debug.LogError($"[ShortCommute] Harmony patches failed to apply "
@@ -67,6 +85,9 @@ namespace SouvyShortCommute.Overlay {
     #endregion
 
     #region Patching
+
+    private static readonly FieldInfo AdultsField = AccessTools.Field(typeof(Dwelling), "_adults");
+    private static readonly FieldInfo ChildrenField = AccessTools.Field(typeof(Dwelling), "_children");
 
     /// <summary>Prefix the named method with the given prefix handler.</summary>
     private static bool PatchMethod(Harmony harmony, string typeName, string methodName,
@@ -102,6 +123,12 @@ namespace SouvyShortCommute.Overlay {
     private static readonly MethodInfo AddDwellerPrefixMethod =
         AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(AddDwellerSafetyPrefix));
 
+    private static readonly MethodInfo DwellingSanitizePrefixMethod =
+        AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(DwellingSanitizePrefix));
+
+    private static readonly MethodInfo DwellingUserFragmentUpdateViewsPrefixMethod =
+        AccessTools.Method(typeof(CommuteOverlayPatcher), nameof(DwellingUserFragmentUpdateViewsPrefix));
+
     /// <summary>Harmony prefix: returning <c>false</c> skips the original. We skip
     /// (suppress the vanilla highlight) exactly when the overlay is active.</summary>
     private static bool SkipWhenOverlayActive() => !CommuteOverlaySuppression.Active;
@@ -133,10 +160,46 @@ namespace SouvyShortCommute.Overlay {
       return dwelling && dwelling.GameObject != null && dwelling.Enabled;
     }
 
+    /// <summary>
+    /// Harmony prefix on Dwelling dweller and count getters:
+    /// Automatically cleans up destroyed/despawned dwellers so phantom dwellers never accumulate.
+    /// </summary>
+    private static void DwellingSanitizePrefix(Dwelling __instance) {
+      if (!__instance) return;
+      var adults = AdultsField?.GetValue(__instance) as HashSet<Dweller>;
+      adults?.RemoveWhere(d => !d || d.GameObject == null || !d.Enabled);
+
+      var children = ChildrenField?.GetValue(__instance) as HashSet<Dweller>;
+      children?.RemoveWhere(d => !d || d.GameObject == null || !d.Enabled);
+    }
+
+    /// <summary>
+    /// Harmony prefix on DwellingUserFragment.UpdateViews:
+    /// Safely sanitizes the adults and children enumerables so destroyed dwellers cannot crash the UI panel.
+    /// </summary>
+    private static void DwellingUserFragmentUpdateViewsPrefix(
+        ref IEnumerable<Dweller> adults,
+        ref IEnumerable<Dweller> children) {
+      if (adults != null) {
+        adults = SafeFilterDwellers(adults);
+      }
+      if (children != null) {
+        children = SafeFilterDwellers(children);
+      }
+    }
+
     private static IEnumerable<Beaver> SafeFilterBeavers(IEnumerable<Beaver> beavers) {
       foreach (var beaver in beavers) {
         if (beaver && beaver.GameObject != null && beaver.Enabled && beaver.HasComponent<Dweller>()) {
           yield return beaver;
+        }
+      }
+    }
+
+    private static IEnumerable<Dweller> SafeFilterDwellers(IEnumerable<Dweller> dwellers) {
+      foreach (var dweller in dwellers) {
+        if (dweller && dweller.GameObject != null && dweller.Enabled) {
+          yield return dweller;
         }
       }
     }
